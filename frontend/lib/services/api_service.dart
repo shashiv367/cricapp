@@ -98,11 +98,11 @@ class ApiService {
         final errorMsg = e.toString();
         String userMessage;
         if (errorMsg.contains('SocketException') || errorMsg.contains('Failed host lookup')) {
-          userMessage = 'Network error: Cannot connect to ${baseUrl.replaceAll('/api', '')}.\n\nPlease check:\n1. Both devices are on the SAME WiFi network\n2. Router "AP Isolation" is DISABLED\n3. Backend is running on your computer\n4. Try accessing http://192.168.1.4:4000/api/health from your phone browser';
+          userMessage = 'Network error: Cannot connect to backend server.\n\nPlease check:\n1. Your phone has internet connection (WiFi or mobile data)\n2. Backend server is online\n3. Try again in a moment (server may be starting up)';
         } else if (errorMsg.contains('TimeoutException') || errorMsg.contains('timed out')) {
-          userMessage = 'Connection timeout: Backend did not respond.\n\nPlease check:\n1. Backend is running\n2. Windows Firewall allows port 4000\n3. Antivirus is not blocking';
+          userMessage = 'Connection timeout: Backend did not respond.\n\nPlease check:\n1. Your phone has internet connection\n2. Backend server is online\n3. Try again (first request after server inactivity may take 30-60 seconds)';
         } else {
-          userMessage = 'Cannot reach backend server. Error: $e\n\nPlease verify:\n1. Backend is running\n2. Both devices are on the same WiFi network\n3. IP address is correct: ${baseUrl.replaceAll('/api', '')}\n4. Firewall allows port 4000';
+          userMessage = 'Cannot reach backend server. Please check your internet connection and try again.';
         }
         throw Exception(userMessage);
       }
@@ -128,7 +128,7 @@ class ApiService {
       developer.log('❌ [API] Network error during signup: $e');
       developer.log('❌ [API] Error message: ${e.message}');
       developer.log('❌ [API] Error URI: ${e.uri}');
-      throw Exception('Network error: ${e.message}. Cannot connect to backend server at $baseUrl. Make sure both devices are on the same WiFi network.');
+      throw Exception('Network error: ${e.message}. Cannot connect to backend server. Please check your internet connection.');
     } on FormatException catch (e) {
       developer.log('❌ [API] Format error during signup: $e');
       throw Exception('Invalid server response format');
@@ -165,11 +165,11 @@ class ApiService {
         final errorMsg = e.toString();
         String userMessage;
         if (errorMsg.contains('SocketException') || errorMsg.contains('Failed host lookup')) {
-          userMessage = 'Network error: Cannot connect to ${baseUrl.replaceAll('/api', '')}.\n\nPlease check:\n1. Both devices are on the SAME WiFi network\n2. Router "AP Isolation" is DISABLED\n3. Backend is running on your computer\n4. Try accessing http://192.168.1.4:4000/api/health from your phone browser';
+          userMessage = 'Network error: Cannot connect to backend server.\n\nPlease check:\n1. Your phone has internet connection (WiFi or mobile data)\n2. Backend server is online\n3. Try again in a moment (server may be starting up)';
         } else if (errorMsg.contains('TimeoutException') || errorMsg.contains('timed out')) {
-          userMessage = 'Connection timeout: Backend did not respond.\n\nPlease check:\n1. Backend is running\n2. Windows Firewall allows port 4000\n3. Antivirus is not blocking';
+          userMessage = 'Connection timeout: Backend did not respond.\n\nPlease check:\n1. Your phone has internet connection\n2. Backend server is online\n3. Try again (first request after server inactivity may take 30-60 seconds)';
         } else {
-          userMessage = 'Cannot reach backend server. Error: $e\n\nPlease verify:\n1. Backend is running\n2. Both devices are on the same WiFi network\n3. IP address is correct: ${baseUrl.replaceAll('/api', '')}\n4. Firewall allows port 4000';
+          userMessage = 'Cannot reach backend server. Please check your internet connection and try again.';
         }
         throw Exception(userMessage);
       }
@@ -201,7 +201,7 @@ class ApiService {
       developer.log('❌ [API] Network error during login: $e');
       developer.log('❌ [API] Error message: ${e.message}');
       developer.log('❌ [API] Error URI: ${e.uri}');
-      throw Exception('Network error: ${e.message}. Cannot connect to backend server at $baseUrl. Make sure both devices are on the same WiFi network.');
+      throw Exception('Network error: ${e.message}. Cannot connect to backend server. Please check your internet connection.');
     } on FormatException catch (e) {
       developer.log('❌ [API] Format error during login: $e');
       throw Exception('Invalid server response format');
