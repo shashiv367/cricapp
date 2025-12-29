@@ -82,29 +82,18 @@ class ApiService {
         'phone': phone,
       });
       
-      // Test connection first
+      // Test connection first (with longer timeout for Render.com cold start)
       developer.log('🔵 [API] Testing connection before signup...');
-      developer.log('🔵 [API] Testing URL: ${baseUrl.replaceAll('/api', '')}/api/health');
+      final healthUrl = '${baseUrl.replaceAll('/api', '')}/api/health';
+      developer.log('🔵 [API] Testing URL: $healthUrl');
       try {
         final testResponse = await http
-            .get(Uri.parse('${baseUrl.replaceAll('/api', '')}/api/health'))
-            .timeout(const Duration(seconds: 5));
+            .get(Uri.parse(healthUrl))
+            .timeout(const Duration(seconds: 60)); // Longer timeout for Render.com cold start
         developer.log('✅ [API] Connection test successful: ${testResponse.statusCode}');
       } catch (e, stackTrace) {
-        developer.log('❌ [API] Connection test failed');
-        developer.log('❌ [API] Error type: ${e.runtimeType}');
-        developer.log('❌ [API] Error message: $e');
-        developer.log('❌ [API] Stack trace: $stackTrace');
-        final errorMsg = e.toString();
-        String userMessage;
-        if (errorMsg.contains('SocketException') || errorMsg.contains('Failed host lookup')) {
-          userMessage = 'Network error: Cannot connect to backend server.\n\nPlease check:\n1. Your phone has internet connection (WiFi or mobile data)\n2. Backend server is online\n3. Try again in a moment (server may be starting up)';
-        } else if (errorMsg.contains('TimeoutException') || errorMsg.contains('timed out')) {
-          userMessage = 'Connection timeout: Backend did not respond.\n\nPlease check:\n1. Your phone has internet connection\n2. Backend server is online\n3. Try again (first request after server inactivity may take 30-60 seconds)';
-        } else {
-          userMessage = 'Cannot reach backend server. Please check your internet connection and try again.';
-        }
-        throw Exception(userMessage);
+        developer.log('⚠️ [API] Connection test failed (will still try signup): $e');
+        // Don't throw error - continue with signup attempt (cold start might just be slow)
       }
 
       developer.log('🔵 [API] Sending signup request...');
@@ -113,10 +102,10 @@ class ApiService {
         headers: await _getHeaders(),
         body: requestBody,
       ).timeout(
-        const Duration(seconds: 30),
+        const Duration(seconds: 60), // Longer timeout for Render.com cold start (30-60 seconds)
         onTimeout: () {
-          developer.log('❌ [API] Signup request timed out after 30 seconds');
-          throw http.ClientException('Request timed out. Please check your internet connection and backend server.');
+          developer.log('❌ [API] Signup request timed out after 60 seconds');
+          throw http.ClientException('Request timed out. Backend server may be starting up (takes 30-60 seconds). Please try again.');
         },
       );
       
@@ -149,29 +138,18 @@ class ApiService {
       developer.log('🔵 [API] POST $baseUrl/auth/login');
       developer.log('🔵 [API] Body: email=$email');
       
-      // Test connection first
+      // Test connection first (with longer timeout for Render.com cold start)
       developer.log('🔵 [API] Testing connection before login...');
-      developer.log('🔵 [API] Testing URL: ${baseUrl.replaceAll('/api', '')}/api/health');
+      final healthUrl = '${baseUrl.replaceAll('/api', '')}/api/health';
+      developer.log('🔵 [API] Testing URL: $healthUrl');
       try {
         final testResponse = await http
-            .get(Uri.parse('${baseUrl.replaceAll('/api', '')}/api/health'))
-            .timeout(const Duration(seconds: 5));
+            .get(Uri.parse(healthUrl))
+            .timeout(const Duration(seconds: 60)); // Longer timeout for Render.com cold start
         developer.log('✅ [API] Connection test successful: ${testResponse.statusCode}');
       } catch (e, stackTrace) {
-        developer.log('❌ [API] Connection test failed');
-        developer.log('❌ [API] Error type: ${e.runtimeType}');
-        developer.log('❌ [API] Error message: $e');
-        developer.log('❌ [API] Stack trace: $stackTrace');
-        final errorMsg = e.toString();
-        String userMessage;
-        if (errorMsg.contains('SocketException') || errorMsg.contains('Failed host lookup')) {
-          userMessage = 'Network error: Cannot connect to backend server.\n\nPlease check:\n1. Your phone has internet connection (WiFi or mobile data)\n2. Backend server is online\n3. Try again in a moment (server may be starting up)';
-        } else if (errorMsg.contains('TimeoutException') || errorMsg.contains('timed out')) {
-          userMessage = 'Connection timeout: Backend did not respond.\n\nPlease check:\n1. Your phone has internet connection\n2. Backend server is online\n3. Try again (first request after server inactivity may take 30-60 seconds)';
-        } else {
-          userMessage = 'Cannot reach backend server. Please check your internet connection and try again.';
-        }
-        throw Exception(userMessage);
+        developer.log('⚠️ [API] Connection test failed (will still try login): $e');
+        // Don't throw error - continue with login attempt (cold start might just be slow)
       }
       
       final uri = Uri.parse('$baseUrl/auth/login');
@@ -186,10 +164,10 @@ class ApiService {
           'password': password,
         }),
       ).timeout(
-        const Duration(seconds: 30),
+        const Duration(seconds: 60), // Longer timeout for Render.com cold start (30-60 seconds)
         onTimeout: () {
-          developer.log('❌ [API] Login request timed out after 30 seconds');
-          throw http.ClientException('Request timed out. Please check your internet connection and backend server.');
+          developer.log('❌ [API] Login request timed out after 60 seconds');
+          throw http.ClientException('Request timed out. Backend server may be starting up (takes 30-60 seconds). Please try again.');
         },
       );
       
