@@ -13,7 +13,7 @@ class ApiService {
   // Mac/Linux: Run 'ifconfig' or 'ip addr' and look for your local network IP (usually 192.168.x.x)
   // 
   // IMPORTANT: Make sure your phone and computer are on the same WiFi network!
-  static const String baseUrl = 'http://192.168.1.4:4000/api'; // Your computer's IP address (for physical device)
+  static const String baseUrl = 'https://ballista-4d2o.onrender.com'; // Your computer's IP address (for physical device)
   // static const String baseUrl = 'http://10.0.2.2:4000/api'; // Android emulator (10.0.2.2 = localhost from emulator)
   // static const String baseUrl = 'http://localhost:4000/api'; // iOS simulator or web
 
