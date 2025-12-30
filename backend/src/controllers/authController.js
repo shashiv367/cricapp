@@ -214,16 +214,27 @@ exports.getProfile = async (req, res, next) => {
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
+    console.log('🔵 [BACKEND] Get Profile - User ID:', userId);
+
     const { data: profile, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.log('❌ [BACKEND] Get Profile error:', JSON.stringify(error, null, 2));
+      throw error;
+    }
+
+    console.log('🔵 [BACKEND] Profile retrieved:');
+    console.log('🔵 [BACKEND] - profile_picture_url:', profile?.profile_picture_url);
+    console.log('🔵 [BACKEND] - team_name:', profile?.team_name);
+    console.log('🔵 [BACKEND] - Full profile:', JSON.stringify(profile, null, 2));
 
     return res.json({ profile });
   } catch (err) {
+    console.log('❌ [BACKEND] Get Profile error:', err.message);
     next(err);
   }
 };
@@ -235,16 +246,28 @@ exports.updateProfile = async (req, res, next) => {
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
-    const { fullName, phone, email } = req.body;
+    console.log('🔵 [BACKEND] Update Profile Request Body:', JSON.stringify(req.body, null, 2));
+    const { fullName, phone, email, profilePictureUrl, teamName } = req.body;
     const updates = {};
 
     if (fullName !== undefined) updates.full_name = fullName;
     if (phone !== undefined) updates.phone = phone;
+    if (profilePictureUrl !== undefined) {
+      console.log('🔵 [BACKEND] Setting profile_picture_url:', profilePictureUrl);
+      updates.profile_picture_url = profilePictureUrl;
+    }
+    if (teamName !== undefined) {
+      console.log('🔵 [BACKEND] Setting team_name:', teamName);
+      updates.team_name = teamName;
+    }
     if (email !== undefined) {
       updates.username = email;
       // Also update auth email if provided
       await supabase.auth.admin.updateUserById(userId, { email });
     }
+
+    console.log('🔵 [BACKEND] Updates object:', JSON.stringify(updates, null, 2));
+    console.log('🔵 [BACKEND] User ID:', userId);
 
     const { data: profile, error } = await supabase
       .from('profiles')
@@ -253,13 +276,33 @@ exports.updateProfile = async (req, res, next) => {
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.log('❌ [BACKEND] Profile update error:', JSON.stringify(error, null, 2));
+      console.log('❌ [BACKEND] Error code:', error.code);
+      console.log('❌ [BACKEND] Error message:', error.message);
+      throw error;
+    }
+
+    if (!profile) {
+      console.log('❌ [BACKEND] No profile returned from update');
+      throw new Error('Profile update returned no data');
+    }
+
+    console.log('✅ [BACKEND] Profile updated successfully');
+    console.log('🔵 [BACKEND] Updated profile data:', JSON.stringify(profile, null, 2));
+    console.log('🔵 [BACKEND] profile_picture_url in response:', profile.profile_picture_url);
+    console.log('🔵 [BACKEND] team_name in response:', profile.team_name);
 
     return res.json({
       message: 'Profile updated successfully',
       profile,
     });
   } catch (err) {
+    console.log('❌ [BACKEND] Update profile error:', err.message);
+    console.log('❌ [BACKEND] Error details:', JSON.stringify(err, null, 2));
+    if (err.stack) {
+      console.log('❌ [BACKEND] Stack trace:', err.stack);
+    }
     next(err);
   }
 };

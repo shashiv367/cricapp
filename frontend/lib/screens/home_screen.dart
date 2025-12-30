@@ -3,6 +3,7 @@ import '../utils/app_colors.dart';
 import '../widgets/match_card.dart';
 import '../widgets/post_card.dart';
 import '../models/post_model.dart';
+import '../services/auth_service.dart';
 import 'team_screen.dart';
 import 'ranking_screen.dart';
 import 'user_matches_screen.dart';
@@ -94,26 +95,61 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.search, color: Colors.white),
             onPressed: () {},
           ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
-            color: AppColors.backgroundCard,
-            onSelected: (value) {
-              if (value == 'logout') {
-                Navigator.pushReplacementNamed(context, '/auth');
-              } else if (value == 'login') {
-                Navigator.pushReplacementNamed(context, '/auth');
+          IconButton(
+            icon: const Icon(Icons.logout_rounded, color: Colors.white),
+            tooltip: 'Logout',
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  backgroundColor: AppColors.backgroundCard,
+                  title: const Text(
+                    'Logout',
+                    style: TextStyle(color: AppColors.textPrimary),
+                  ),
+                  content: const Text(
+                    'Are you sure you want to logout?',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.accentRed,
+                      ),
+                      child: const Text('Logout'),
+                    ),
+                  ],
+                ),
+              );
+
+              if (confirm == true && mounted) {
+                try {
+                  final authService = AuthService();
+                  await authService.signOut();
+                  if (mounted) {
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      '/auth',
+                      (route) => false,
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Logout failed: $e'),
+                        backgroundColor: AppColors.accentRed,
+                      ),
+                    );
+                  }
+                }
               }
             },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'logout',
-                child: Text('Logout'),
-              ),
-              const PopupMenuItem(
-                value: 'login',
-                child: Text('Login'),
-              ),
-            ],
           ),
         ],
       ),

@@ -3,3 +3,4 @@ flutter run --dart-define=SUPABASE_URL=https://prxfvwqortyeflsuahkj.supabase.co 
 
 
 
+

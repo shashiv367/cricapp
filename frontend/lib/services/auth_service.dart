@@ -162,5 +162,17 @@ class AuthService {
 
     await supabase.from('profiles').update(data).eq('id', user.id);
   }
+
+  /// Sign out the current user
+  Future<void> signOut() async {
+    try {
+      developer.log('🔵 [AUTH] Signing out...');
+      await supabase.auth.signOut();
+      developer.log('✅ [AUTH] Sign out successful');
+    } catch (e, stackTrace) {
+      developer.log('❌ [AUTH] Sign out failed: $e', error: e, stackTrace: stackTrace);
+      rethrow;
+    }
+  }
 }
 

@@ -205,16 +205,28 @@ class ApiService {
     String? fullName,
     String? phone,
     String? email,
+    String? profilePictureUrl,
+    String? teamName,
   }) async {
+    final body = <String, dynamic>{};
+    if (fullName != null) body['fullName'] = fullName;
+    if (phone != null) body['phone'] = phone;
+    if (email != null) body['email'] = email;
+    if (profilePictureUrl != null) body['profilePictureUrl'] = profilePictureUrl;
+    if (teamName != null) body['teamName'] = teamName;
+    
+    developer.log('🔵 [API] PUT $baseUrl/auth/profile');
+    developer.log('🔵 [API] Body: ${json.encode(body)}');
+    
     final response = await http.put(
       Uri.parse('$baseUrl/auth/profile'),
       headers: await _getHeaders(token: token),
-      body: json.encode({
-        if (fullName != null) 'fullName': fullName,
-        if (phone != null) 'phone': phone,
-        if (email != null) 'email': email,
-      }),
+      body: json.encode(body),
     );
+    
+    developer.log('🔵 [API] Response status: ${response.statusCode}');
+    developer.log('🔵 [API] Response body: ${response.body}');
+    
     return await _handleResponse(response);
   }
 
