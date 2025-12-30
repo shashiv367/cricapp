@@ -197,6 +197,32 @@ exports.addPlayerToMatch = async (req, res, next) => {
   }
 };
 
+// Delete player from match (umpire only)
+exports.deletePlayerFromMatch = async (req, res, next) => {
+  try {
+    const { matchId, playerStatId } = req.params;
+
+    if (!matchId || !playerStatId) {
+      return res.status(400).json({ message: 'matchId and playerStatId are required' });
+    }
+
+    // Delete player stat entry
+    const { error } = await supabase
+      .from('match_player_stats')
+      .delete()
+      .eq('id', playerStatId)
+      .eq('match_id', matchId);
+
+    if (error) throw error;
+
+    return res.json({
+      message: 'Player removed from match successfully',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Update player stats in match (umpire only)
 exports.updatePlayerStats = async (req, res, next) => {
   try {
@@ -327,6 +353,44 @@ exports.listUmpireMatches = async (req, res, next) => {
     if (error) throw error;
 
     return res.json({ matches: matches || [] });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Update match status (umpire only)
+exports.updateMatchStatus = async (req, res, next) => {
+  try {
+    const { matchId } = req.params;
+    const { status } = req.body;
+
+    if (!matchId) {
+      return res.status(400).json({ message: 'matchId is required' });
+    }
+
+    if (!status) {
+      return res.status(400).json({ message: 'status is required' });
+    }
+
+    // Validate status
+    const validStatuses = ['live', 'completed', 'cancelled', 'scheduled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ message: `status must be one of: ${validStatuses.join(', ')}` });
+    }
+
+    const { data: match, error } = await supabase
+      .from('matches')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', matchId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return res.json({
+      message: 'Match status updated successfully',
+      match,
+    });
   } catch (err) {
     next(err);
   }

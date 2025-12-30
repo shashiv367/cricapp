@@ -44,6 +44,13 @@ class ApiService {
 
   static Future<Map<String, dynamic>> _handleResponse(http.Response response) async {
     try {
+      // Check if response is HTML (likely an error page)
+      if (response.body.trim().startsWith('<!DOCTYPE') || response.body.trim().startsWith('<!doctype')) {
+        developer.log('❌ [API] Server returned HTML instead of JSON (likely 404 or error page)');
+        developer.log('❌ [API] Response body: ${response.body.substring(0, 200)}...');
+        throw Exception('Server endpoint not found. Please ensure the backend is updated and restarted.');
+      }
+      
       final body = json.decode(response.body);
       if (response.statusCode >= 200 && response.statusCode < 300) {
         return body;
@@ -54,8 +61,8 @@ class ApiService {
       }
     } catch (e) {
       if (e is Exception) rethrow;
-      developer.log('❌ [API] Failed to parse response: ${response.body}');
-      throw Exception('Failed to parse server response');
+      developer.log('❌ [API] Failed to parse response: ${response.body.substring(0, 200)}');
+      throw Exception('Failed to parse server response. The backend may not be updated with the latest changes.');
     }
   }
 
@@ -209,6 +216,7 @@ class ApiService {
     String? teamName,
   }) async {
     final body = <String, dynamic>{};
+    // Include all provided fields - backend handles empty strings appropriately
     if (fullName != null) body['fullName'] = fullName;
     if (phone != null) body['phone'] = phone;
     if (email != null) body['email'] = email;
@@ -371,6 +379,28 @@ class ApiService {
     return await _handleResponse(response);
   }
 
+  static Future<Map<String, dynamic>> updateMatchStatus({
+    required String token,
+    required String matchId,
+    required String status,
+  }) async {
+    developer.log('🔵 [API] PUT $baseUrl/umpire/matches/$matchId/status');
+    developer.log('🔵 [API] Body: status=$status');
+    
+    final response = await http.put(
+      Uri.parse('$baseUrl/umpire/matches/$matchId/status'),
+      headers: await _getHeaders(token: token),
+      body: json.encode({
+        'status': status,
+      }),
+    );
+    
+    developer.log('🔵 [API] Response status: ${response.statusCode}');
+    developer.log('🔵 [API] Response body: ${response.body}');
+    
+    return await _handleResponse(response);
+  }
+
   static Future<Map<String, dynamic>> addPlayerToMatch({
     required String token,
     required String matchId,
@@ -386,6 +416,18 @@ class ApiService {
         'teamId': teamId,
         if (playerName != null) 'playerName': playerName,
       }),
+    );
+    return await _handleResponse(response);
+  }
+
+  static Future<Map<String, dynamic>> deletePlayerFromMatch({
+    required String token,
+    required String matchId,
+    required String playerStatId,
+  }) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/umpire/matches/$matchId/players/$playerStatId'),
+      headers: await _getHeaders(token: token),
     );
     return await _handleResponse(response);
   }
