@@ -4,7 +4,7 @@
 -- ============================================
 -- PROFILES TABLE
 -- ============================================
--- Extends auth.users with role and profile info
+
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   full_name TEXT,
