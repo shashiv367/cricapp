@@ -23,55 +23,56 @@ class AddTeamPlayersScreen extends StatefulWidget {
 
 class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
   final _playerNameController = TextEditingController();
-  final List<Map<String, dynamic>> _players = [];
+  final List> _players = [];
+  final Set<String> _removingPlayerIds = {};
+
   String? _actualTeamId;
-  bool _loading = false;
   bool _loadingTeamId = true;
   bool _addingPlayer = false;
+  bool _continuing = false;
+
+  Color get _teamAccentColor =>
+      widget.isTeamA ? AppColors.primaryBlue : AppColors.accentRed;
 
   @override
   void initState() {
     super.initState();
-    if (widget.teamId != null) {
-      _actualTeamId = widget.teamId;
-      _loadingTeamId = false;
-      _loadExistingPlayers();
-    } else {
-      _fetchTeamIdAndPlayers();
-    }
+    _actualTeamId = widget.teamId;
+    _initScreenData();
   }
 
-  Future<void> _fetchTeamIdAndPlayers() async {
+  Future<String?> _getAccessToken() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return null;
+    return supabase.auth.currentSession?.accessToken;
+  }
+
+  Future?> _fetchMatch() async {
+    final token = await _getAccessToken();
+    if (token == null) return null;
+
+    final response = await ApiService.getMatchDetails(
+      token: token,
+      matchId: widget.matchId,
+    );
+    return response['match'] as Map<String, dynamic>?;
+  }
+
+  Future<void> _initScreenData() async {
     try {
-      final user = supabase.auth.currentUser;
-      if (user == null) return;
+      final match = await _fetchMatch();
+      if (match == null || !mounted) return;
 
-      final token = await supabase.auth.currentSession?.accessToken;
-      if (token == null) return;
-
-      final response = await ApiService.getMatchDetails(token: token, matchId: widget.matchId);
-      final match = response['match'] as Map<String, dynamic>?;
-      
-      if (match != null) {
-        if (widget.isTeamA) {
-          final teamA = match['team_a'] as Map<String, dynamic>?;
-          _actualTeamId = teamA?['id'] as String?;
-        } else {
-          final teamB = match['team_b'] as Map<String, dynamic>?;
-          _actualTeamId = teamB?['id'] as String?;
-        }
-        
-        // Load existing players for this team
-        _loadPlayersFromMatchData(match);
+      if (_actualTeamId == null) {
+        final teamKey = widget.isTeamA ? 'team_a' : 'team_b';
+        final team = match[teamKey] as Map<String, dynamic>?;
+        _actualTeamId = team?['id'] as String?;
       }
+
+      _loadPlayersFromMatchData(match);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to load match details: $e'),
-            backgroundColor: AppColors.accentRed,
-          ),
-        );
+        _showSnackBar('Failed to load match details: $e', isError: true);
       }
     } finally {
       if (mounted) {
@@ -80,67 +81,36 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
     }
   }
 
-  Future<void> _loadExistingPlayers() async {
-    try {
-      final user = supabase.auth.currentUser;
-      if (user == null) return;
-
-      final token = await supabase.auth.currentSession?.accessToken;
-      if (token == null) return;
-
-      final response = await ApiService.getMatchDetails(token: token, matchId: widget.matchId);
-      final match = response['match'] as Map<String, dynamic>?;
-      
-      if (match != null) {
-        _loadPlayersFromMatchData(match);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to load players: $e'),
-            backgroundColor: AppColors.accentRed,
-          ),
-        );
-      }
-    }
-  }
-
   void _loadPlayersFromMatchData(Map<String, dynamic> match) {
-    final playerStats = match['playerStats'] as List<dynamic>? ?? [];
     final currentTeamId = _actualTeamId;
-    
     if (currentTeamId == null) return;
 
-    // Filter players for the current team
-    final teamPlayers = playerStats.where((stat) {
-      final statMap = stat as Map<String, dynamic>;
-      return statMap['team_id'] == currentTeamId;
-    }).map((stat) {
-      final statMap = stat as Map<String, dynamic>;
-      return {
-        'id': statMap['id'],
-        'name': statMap['player_name'] ?? 'Unknown Player',
-      };
-    }).toList();
+    final playerStats = match['playerStats'] as List<dynamic>? ?? [];
+    final teamPlayers = playerStats
+        .whereType>()
+        .where((stat) => stat['team_id'] == currentTeamId)
+        .map((stat) => <String, dynamic>{
+              'id': stat['id'],
+              'name': stat['player_name'] ?? 'Unknown Player',
+            })
+        .toList();
 
+    if (!mounted) return;
     setState(() {
-      _players.clear();
-      _players.addAll(teamPlayers);
+      _players
+        ..clear()
+        ..addAll(teamPlayers);
     });
   }
 
   Future<void> _addPlayer() async {
     final playerName = _playerNameController.text.trim();
-    if (playerName.isEmpty || _actualTeamId == null) return;
+    if (playerName.isEmpty || _actualTeamId == null || _addingPlayer) return;
 
     setState(() => _addingPlayer = true);
     try {
-      final user = supabase.auth.currentUser;
-      if (user == null) throw Exception('Not authenticated');
-
-      final token = await supabase.auth.currentSession?.accessToken;
-      if (token == null) throw Exception('No session token');
+      final token = await _getAccessToken();
+      if (token == null) throw Exception('Not authenticated');
 
       final response = await ApiService.addPlayerToMatch(
         token: token,
@@ -150,33 +120,19 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
       );
 
       final playerStat = response['playerStat'] as Map<String, dynamic>?;
-      if (playerStat != null) {
+      if (mounted) {
         setState(() {
           _players.add({
-            'id': playerStat['id'],
+            'id': playerStat?['id'],
             'name': playerName,
           });
           _playerNameController.clear();
         });
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$playerName added successfully'),
-            backgroundColor: AppColors.accentGreen,
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        _showSnackBar('$playerName added successfully');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to add player: $e'),
-            backgroundColor: AppColors.accentRed,
-          ),
-        );
+        _showSnackBar('Failed to add player: $e', isError: true);
       }
     } finally {
       if (mounted) {
@@ -186,23 +142,23 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
   }
 
   Future<void> _removePlayer(int index) async {
-    final player = _players[index];
-    final playerStatId = player['id'] as String?;
+    if (index < 0 || index >= _players.length) return;
 
-    if (playerStatId == null) {
-      // If no ID, just remove from local list (player was never saved)
-      setState(() {
-        _players.removeAt(index);
-      });
+    final player = _players[index];
+    final playerName = (player['name'] ?? 'Player').toString();
+    final playerStatId = player['id']?.toString();
+
+    if (playerStatId == null || playerStatId.isEmpty) {
+      setState(() => _players.removeAt(index));
       return;
     }
 
-    try {
-      final user = supabase.auth.currentUser;
-      if (user == null) throw Exception('Not authenticated');
+    if (_removingPlayerIds.contains(playerStatId)) return;
 
-      final token = await supabase.auth.currentSession?.accessToken;
-      if (token == null) throw Exception('No session token');
+    setState(() => _removingPlayerIds.add(playerStatId));
+    try {
+      final token = await _getAccessToken();
+      if (token == null) throw Exception('Not authenticated');
 
       await ApiService.deletePlayerFromMatch(
         token: token,
@@ -210,81 +166,74 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
         playerStatId: playerStatId,
       );
 
-      setState(() {
-        _players.removeAt(index);
-      });
-
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${player['name']} removed successfully'),
-            backgroundColor: AppColors.accentGreen,
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        setState(() {
+          _players.removeWhere((item) => item['id']?.toString() == playerStatId);
+        });
+        _showSnackBar('$playerName removed successfully');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to remove player: $e'),
-            backgroundColor: AppColors.accentRed,
-          ),
-        );
+        _showSnackBar('Failed to remove player: $e', isError: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _removingPlayerIds.remove(playerStatId));
       }
     }
   }
 
   Future<void> _continueToNextTeam() async {
-    // Fetch match details to get the other team info
+    if (_continuing) return;
+
+    if (!widget.isTeamA) {
+      Navigator.of(context).popUntil(
+        (route) => route.isFirst || route.settings.name == '/umpire-dashboard',
+      );
+      return;
+    }
+
+    setState(() => _continuing = true);
     try {
-      final user = supabase.auth.currentUser;
-      if (user == null) return;
+      final match = await _fetchMatch();
+      final teamB = match?['team_b'] as Map<String, dynamic>?;
 
-      final token = await supabase.auth.currentSession?.accessToken;
-      if (token == null) return;
-
-      final response = await ApiService.getMatchDetails(token: token, matchId: widget.matchId);
-      final match = response['match'] as Map<String, dynamic>?;
-
-      if (match != null) {
-        Map<String, dynamic>? nextTeam;
-        if (widget.isTeamA) {
-          // Move to Team B
-          final teamB = match['team_b'] as Map<String, dynamic>?;
-          nextTeam = teamB;
-        } else {
-          // Team B is done, navigate back to umpire dashboard or match screen
-          if (mounted) {
-            Navigator.of(context).popUntil((route) => route.isFirst || route.settings.name == '/umpire-dashboard');
-          }
-          return;
-        }
-
-        if (nextTeam != null && mounted) {
+      if (mounted) {
+        if (teamB != null) {
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
               builder: (_) => AddTeamPlayersScreen(
                 matchId: widget.matchId,
-                teamName: nextTeam!['name'] ?? 'Team B',
-                teamId: nextTeam['id'],
+                teamName: (teamB['name'] ?? 'Team B').toString(),
+                teamId: teamB['id']?.toString(),
                 isTeamA: false,
               ),
             ),
           );
+        } else {
+          _showSnackBar('Team B details not found', isError: true);
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to continue: $e'),
-            backgroundColor: AppColors.accentRed,
-          ),
-        );
+        _showSnackBar('Failed to continue: $e', isError: true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _continuing = false);
       }
     }
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? AppColors.accentRed : AppColors.accentGreen,
+        duration: Duration(seconds: isError ? 3 : 2),
+      ),
+    );
   }
 
   @override
@@ -295,6 +244,8 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final accent = _teamAccentColor;
+
     if (_loadingTeamId) {
       return Scaffold(
         backgroundColor: AppColors.backgroundDark,
@@ -330,7 +281,7 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    (widget.isTeamA ? AppColors.primaryBlue : AppColors.accentRed).withOpacity(0.2),
+                    accent.withOpacity(0.2),
                     AppColors.backgroundCard,
                   ],
                 ),
@@ -341,17 +292,17 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: (widget.isTeamA ? AppColors.primaryBlue : AppColors.accentRed).withOpacity(0.1),
+                      color: accent.withOpacity(0.1),
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: (widget.isTeamA ? AppColors.primaryBlue : AppColors.accentRed).withOpacity(0.3),
+                        color: accent.withOpacity(0.3),
                         width: 2,
                       ),
                     ),
                     child: Icon(
                       Icons.people_rounded,
                       size: 48,
-                      color: widget.isTeamA ? AppColors.primaryBlue : AppColors.accentRed,
+                      color: accent,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -378,13 +329,13 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
                       color: AppColors.backgroundCardAlt,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: (widget.isTeamA ? AppColors.primaryBlue : AppColors.accentRed).withOpacity(0.3),
+                        color: accent.withOpacity(0.3),
                       ),
                     ),
                     child: Text(
                       '${_players.length} ${_players.length == 1 ? 'player' : 'players'} added',
                       style: TextStyle(
-                        color: widget.isTeamA ? AppColors.primaryBlue : AppColors.accentRed,
+                        color: accent,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
@@ -394,13 +345,12 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
               ),
             ),
 
-            // Add Player Section
+            // Add Player & List Section
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Add Player Input
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -408,13 +358,13 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                         colors: [
-                          (widget.isTeamA ? AppColors.primaryBlue : AppColors.accentRed).withOpacity(0.15),
-                          (widget.isTeamA ? AppColors.primaryBlue : AppColors.accentRed).withOpacity(0.05),
+                          accent.withOpacity(0.15),
+                          accent.withOpacity(0.05),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: (widget.isTeamA ? AppColors.primaryBlue : AppColors.accentRed).withOpacity(0.3),
+                        color: accent.withOpacity(0.3),
                         width: 1.5,
                       ),
                     ),
@@ -426,12 +376,12 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
                             Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: (widget.isTeamA ? AppColors.primaryBlue : AppColors.accentRed).withOpacity(0.2),
+                                color: accent.withOpacity(0.2),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Icon(
                                 Icons.person_add_rounded,
-                                color: widget.isTeamA ? AppColors.primaryBlue : AppColors.accentRed,
+                                color: accent,
                                 size: 24,
                               ),
                             ),
@@ -452,6 +402,7 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
                             Expanded(
                               child: TextField(
                                 controller: _playerNameController,
+                                textInputAction: TextInputAction.done,
                                 style: const TextStyle(color: AppColors.textPrimary),
                                 decoration: InputDecoration(
                                   hintText: 'Enter player name',
@@ -467,11 +418,14 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
                                     borderSide: BorderSide(
-                                      color: widget.isTeamA ? AppColors.primaryBlue : AppColors.accentRed,
+                                      color: accent,
                                       width: 2,
                                     ),
                                   ),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 16,
+                                  ),
                                 ),
                                 onSubmitted: (_) => _addPlayer(),
                               ),
@@ -479,11 +433,11 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
                             const SizedBox(width: 12),
                             Container(
                               decoration: BoxDecoration(
-                                color: widget.isTeamA ? AppColors.primaryBlue : AppColors.accentRed,
+                                color: accent,
                                 borderRadius: BorderRadius.circular(12),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: (widget.isTeamA ? AppColors.primaryBlue : AppColors.accentRed).withOpacity(0.3),
+                                    color: accent.withOpacity(0.3),
                                     blurRadius: 10,
                                     offset: const Offset(0, 4),
                                   ),
@@ -521,7 +475,6 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // Players List
                   if (_players.isNotEmpty) ...[
                     Row(
                       children: [
@@ -544,6 +497,10 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
                     const SizedBox(height: 16),
                     ...List.generate(_players.length, (index) {
                       final player = _players[index];
+                      final playerId = player['id']?.toString();
+                      final isRemoving =
+                          playerId != null && _removingPlayerIds.contains(playerId);
+
                       return Container(
                         margin: const EdgeInsets.only(bottom: 12),
                         padding: const EdgeInsets.all(16),
@@ -560,14 +517,14 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
                               width: 40,
                               height: 40,
                               decoration: BoxDecoration(
-                                color: (widget.isTeamA ? AppColors.primaryBlue : AppColors.accentRed).withOpacity(0.1),
+                                color: accent.withOpacity(0.1),
                                 shape: BoxShape.circle,
                               ),
                               child: Center(
                                 child: Text(
                                   (index + 1).toString(),
                                   style: TextStyle(
-                                    color: widget.isTeamA ? AppColors.primaryBlue : AppColors.accentRed,
+                                    color: accent,
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -577,7 +534,7 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
                             const SizedBox(width: 16),
                             Expanded(
                               child: Text(
-                                player['name'] ?? '',
+                                (player['name'] ?? '').toString(),
                                 style: const TextStyle(
                                   color: AppColors.textPrimary,
                                   fontSize: 16,
@@ -585,103 +542,14 @@ class _AddTeamPlayersScreenState extends State<AddTeamPlayersScreen> {
                                 ),
                               ),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.close_rounded, color: AppColors.textMuted),
-                              onPressed: () => _removePlayer(index),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                    const SizedBox(height: 24),
-                  ] else ...[
-                    Container(
-                      padding: const EdgeInsets.all(32),
-                      decoration: BoxDecoration(
-                        color: AppColors.backgroundCard,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.backgroundCardAlt),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.person_add_outlined,
-                            color: AppColors.textMuted,
-                            size: 64,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No players added yet',
-                            style: TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Start adding players to build your team',
-                            style: TextStyle(
-                              color: AppColors.textMuted,
-                              fontSize: 14,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // Continue Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: widget.isTeamA ? AppColors.primaryBlue : AppColors.accentRed,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        elevation: 0,
-                      ),
-                      onPressed: _loading ? null : _continueToNextTeam,
-                      child: _loading
-                          ? const SizedBox(
-                              height: 24,
-                              width: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  widget.isTeamA ? 'Continue to Team B' : 'Finish',
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Icon(
-                                  widget.isTeamA ? Icons.arrow_forward_rounded : Icons.check_rounded,
-                                  size: 24,
-                                ),
-                              ],
-                            ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
+                            isRemoving
+                                ? SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: accent,
+                                    ),
+                                  )
+                                : IconButton(
+            
